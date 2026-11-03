@@ -13,7 +13,6 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -21,7 +20,6 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setSuccessMsg('');
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -44,33 +42,15 @@ export default function Login() {
     else router.push('/student');
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError('Please enter your email address first to reset your password.');
-      return;
-    }
-    
-    setLoading(true); setError(''); setSuccessMsg('');
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    if (error) setError(error.message);
-    else setSuccessMsg('Password reset link sent! Check your email inbox.');
-    setLoading(false);
-  };
-
   return (
     <div className="flex min-h-screen relative bg-gray-50">
       
-      {/* MOBILE BACKGROUND (Only shows on phones/tablets) */}
+      {/* MOBILE BACKGROUND */}
       <div className="absolute inset-0 lg:hidden bg-[url('/atu-campus.jpg')] bg-cover bg-center">
-        {/* Dark blue overlay for readability */}
         <div className="absolute inset-0 bg-[#0A1628]/85"></div>
       </div>
 
-      {/* LEFT SIDE: Branding (Only shows on Laptops) */}
+      {/* LEFT SIDE: Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-blue-900 overflow-hidden">
         <div className="absolute inset-0 bg-[url('/atu-campus.jpg')] bg-cover bg-center"></div>
         <div className="absolute inset-0 bg-gradient-to-br from-[#0A1628]/90 to-[#0A1628]/70 mix-blend-multiply"></div>
@@ -112,11 +92,6 @@ export default function Login() {
               <p className="text-sm text-red-700 font-medium">{error}</p>
             </div>
           )}
-          {successMsg && (
-            <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-md flex items-start">
-              <p className="text-sm text-green-700 font-medium">{successMsg}</p>
-            </div>
-          )}
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
@@ -144,9 +119,10 @@ export default function Login() {
                 <span className="text-sm text-gray-600 font-medium">Remember me</span>
               </label>
               
-              <button type="button" onClick={handleForgotPassword} className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition">
+              {/* CHANGED TO A LINK */}
+              <Link href="/forgot-password" className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition">
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3.5 px-4 rounded-xl font-bold hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all disabled:opacity-70 flex justify-center items-center gap-2">

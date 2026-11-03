@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Upload, FileText, Trash2 } from 'lucide-react';
+import { Upload, FileText, Trash2, Download } from 'lucide-react';
+import { exportToCSV } from '@/utils/exportToCSV';
 
 export default function CourseDetail() {
   const params = useParams();
@@ -50,6 +51,31 @@ export default function CourseDetail() {
     if (courseId) fetchCourseData();
   }, [courseId]);
 
+  // --- EXPORT FUNCTIONS ---
+  const exportAttendance = () => {
+    const data = sessions.map(s => ({
+      Date: new Date(s.created_at).toLocaleString(),
+      Code: s.code,
+      Status: s.is_active ? 'Active' : 'Closed'
+    }));
+    exportToCSV(data, ['Date', 'Code', 'Status'], `${course?.course_code}_Attendance_History`);
+  };
+
+  const exportGrades = () => {
+    const data = students.map(student => {
+      const grade = grades.find(g => g.student_id === student.id && g.assessment_name === assessmentName);
+      return {
+        StudentName: student.full_name,
+        Email: student.email,
+        Assessment: assessmentName,
+        Score: grade ? grade.score : 'Not Graded',
+        MaxScore: maxScore
+      };
+    });
+    exportToCSV(data, ['StudentName', 'Email', 'Assessment', 'Score', 'MaxScore'], `${course?.course_code}_${assessmentName.replace(/\s+/g, '_')}_Grades`);
+  };
+  // ------------------------
+
   const handleGradeChange = async (studentId: string, scoreStr: string) => {
     const score = parseFloat(scoreStr);
     if (isNaN(score)) return;
@@ -89,8 +115,8 @@ export default function CourseDetail() {
     fetchMaterials();
   };
 
-  if (loading) return <div className="text-gray-500">Loading course details...</div>;
-  if (!course) return <div className="text-red-500">Course not found.</div>;
+  if (loading) return <div className="text-gray-500 p-8">Loading course details...</div>;
+  if (!course) return <div className="text-red-500 p-8">Course not found.</div>;
 
   return (
     <div className="max-w-6xl mx-auto pb-12">
@@ -116,73 +142,105 @@ export default function CourseDetail() {
         
         {/* STUDENTS TAB */}
         {activeTab === 'students' && (
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr><th className="p-4 font-semibold text-gray-600">Student Name</th><th className="p-4 font-semibold text-gray-600">Email Address</th></tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="p-4 font-bold text-gray-900">{student.full_name}</td>
-                  <td className="p-4 text-gray-600">{student.email}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr><th className="p-4 font-semibold text-gray-600">Student Name</th><th className="p-4 font-semibold text-gray-600">Email Address</th></tr>
+              </thead>
+              <tbody>
+                {students.length === 0 ? (
+                  <tr><td colSpan={2} className="p-8 text-center text-gray-500">No students enrolled.</td></tr>
+                ) : (
+                  students.map((student) => (
+                    <tr key={student.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="p-4 font-bold text-gray-900">{student.full_name}</td>
+                      <td className="p-4 text-gray-600">{student.email}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {/* ATTENDANCE TAB */}
         {activeTab === 'attendance' && (
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr><th className="p-4 font-semibold text-gray-600">Date</th><th className="p-4 font-semibold text-gray-600">Code</th><th className="p-4 font-semibold text-gray-600">Status</th></tr>
-            </thead>
-            <tbody>
-              {sessions.map((session) => (
-                <tr key={session.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="p-4 text-gray-900 font-medium">{new Date(session.created_at).toLocaleString()}</td>
-                  <td className="p-4 font-mono font-bold text-blue-700">{session.code}</td>
-                  <td className="p-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${session.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{session.is_active ? 'Active' : 'Closed'}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-end">
+              <button onClick={exportAttendance} className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition shadow-sm text-sm">
+                <Download className="w-4 h-4" /> Export Attendance
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-white border-b border-gray-100">
+                  <tr><th className="p-4 font-semibold text-gray-600">Date</th><th className="p-4 font-semibold text-gray-600">Code</th><th className="p-4 font-semibold text-gray-600">Status</th></tr>
+                </thead>
+                <tbody>
+                  {sessions.length === 0 ? (
+                    <tr><td colSpan={3} className="p-8 text-center text-gray-500">No attendance sessions created yet.</td></tr>
+                  ) : (
+                    sessions.map((session) => (
+                      <tr key={session.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="p-4 text-gray-900 font-medium">{new Date(session.created_at).toLocaleString()}</td>
+                        <td className="p-4 font-mono font-bold text-blue-700">{session.code}</td>
+                        <td className="p-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${session.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{session.is_active ? 'Active' : 'Closed'}</span></td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {/* GRADES TAB */}
         {activeTab === 'grades' && (
           <div>
-            <div className="p-6 bg-blue-50 border-b border-blue-100 flex items-end gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-blue-900 mb-1">Assessment Name</label>
-                <select value={assessmentName} onChange={e => setAssessmentName(e.target.value)} className="p-2 rounded-lg border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[200px]">
-                  <option value="Quiz 1">Quiz 1</option><option value="Assignment 1">Assignment 1</option><option value="Midterm Exam">Midterm Exam</option><option value="Final Exam">Final Exam</option>
-                </select>
+            <div className="p-6 bg-blue-50 border-b border-blue-100 flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div className="flex flex-col md:flex-row md:items-end gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">Assessment Name</label>
+                  <select value={assessmentName} onChange={e => setAssessmentName(e.target.value)} className="p-2 rounded-lg border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[200px]">
+                    <option value="Quiz 1">Quiz 1</option>
+                    <option value="Assignment 1">Assignment 1</option>
+                    <option value="Midterm Exam">Midterm Exam</option>
+                    <option value="Final Exam">Final Exam</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-blue-900 mb-1">Max Score</label>
+                  <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} className="p-2 w-24 rounded-lg border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-blue-900 mb-1">Max Score</label>
-                <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} className="p-2 w-24 rounded-lg border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-              </div>
-              <p className="text-sm text-blue-700 mb-3">Type the student's score below. It saves automatically.</p>
+              <button onClick={exportGrades} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition shadow-sm text-sm">
+                <Download className="w-4 h-4" /> Export Grades
+              </button>
             </div>
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr><th className="p-4 font-semibold text-gray-600">Student Name</th><th className="p-4 font-semibold text-gray-600 text-right">Score (out of {maxScore})</th></tr>
-              </thead>
-              <tbody>
-                {students.map((student) => {
-                  const gradeRecord = grades.find(g => g.student_id === student.id && g.assessment_name === assessmentName);
-                  return (
-                    <tr key={student.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                      <td className="p-4 font-bold text-gray-900">{student.full_name}</td>
-                      <td className="p-4 text-right">
-                        <input type="number" placeholder="--" defaultValue={gradeRecord ? gradeRecord.score : ''} onBlur={(e) => handleGradeChange(student.id, e.target.value)} className="w-24 p-2 text-center font-bold text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all" />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr><th className="p-4 font-semibold text-gray-600">Student Name</th><th className="p-4 font-semibold text-gray-600 text-right">Score (out of {maxScore})</th></tr>
+                </thead>
+                <tbody>
+                  {students.length === 0 ? (
+                    <tr><td colSpan={2} className="p-8 text-center text-gray-500">No students enrolled.</td></tr>
+                  ) : (
+                    students.map((student) => {
+                      const gradeRecord = grades.find(g => g.student_id === student.id && g.assessment_name === assessmentName);
+                      return (
+                        <tr key={student.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="p-4 font-bold text-gray-900">{student.full_name}</td>
+                          <td className="p-4 text-right">
+                            <input type="number" placeholder="--" defaultValue={gradeRecord ? gradeRecord.score : ''} onBlur={(e) => handleGradeChange(student.id, e.target.value)} className="w-24 p-2 text-center font-bold text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all" />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -194,19 +252,20 @@ export default function CourseDetail() {
                 <label className="block text-sm font-bold text-blue-900 mb-2">Upload New Material</label>
                 <input type="text" placeholder="e.g. Week 1 - Lecture Slides" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="w-full p-2.5 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div>
-                <label className={`cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold transition flex items-center gap-2 ${(!uploadTitle || uploading) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+              <div className="w-full md:w-auto">
+                <label className={`cursor-pointer w-full justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold transition flex items-center gap-2 ${(!uploadTitle || uploading) ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <Upload className="w-4 h-4" /> {uploading ? 'Uploading...' : 'Choose File'}
                   <input type="file" className="hidden" onChange={handleFileUpload} disabled={!uploadTitle || uploading} />
                 </label>
               </div>
             </div>
+
             <div className="space-y-3">
               {materials.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">No materials uploaded yet.</div>
               ) : (
                 materials.map((mat) => (
-                  <div key={mat.id} className="flex justify-between items-center p-4 bg-gray-50 border border-gray-100 rounded-xl hover:bg-gray-100/50 transition">
+                  <div key={mat.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-4 bg-gray-50 border border-gray-100 rounded-xl hover:bg-gray-100/50 transition gap-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><FileText className="w-5 h-5" /></div>
                       <div>
@@ -214,7 +273,7 @@ export default function CourseDetail() {
                         <p className="text-xs text-gray-500">{new Date(mat.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 justify-end">
                       <a href={mat.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-sm font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 transition">Download</a>
                       <button onClick={() => handleDeleteMaterial(mat.id, mat.file_url)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"><Trash2 className="w-4 h-4" /></button>
                     </div>
