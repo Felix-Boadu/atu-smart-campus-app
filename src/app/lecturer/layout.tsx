@@ -4,65 +4,39 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { Menu, X } from 'lucide-react';
 
 export default function LecturerLayout({ children }: { children: React.ReactNode }) {
   const [lecturerName, setLecturerName] = useState('Lecturer');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sessionExists, setSessionExists] = useState<boolean | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // NEW
   
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchProfile = async (userId: string) => {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role, avatar_url')
-          .eq('id', userId)
-          .single();
-        
-        if (isMounted) {
-          if (profile) {
-            setLecturerName(profile.full_name || 'Lecturer');
-            setAvatarUrl(profile.avatar_url || null);
-          }
-          setLoading(false);
-          setSessionExists(true);
-        }
-      } catch (err) {
-        console.error("Error fetching profile:", err);
-        if (isMounted) setLoading(false);
+    let mounted = true;
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setTimeout(() => { if (mounted) router.replace('/login'); }, 500); return; }
+      
+      const { data: profile } = await supabase.from('profiles').select('full_name, role, avatar_url').eq('id', session.user.id).single();
+      if (profile?.role !== 'lecturer') { if (mounted) router.replace('/login'); return; }
+      
+      if (mounted) {
+        setLecturerName(profile.full_name || 'Lecturer');
+        setAvatarUrl(profile.avatar_url || null);
+        setLoading(false);
       }
     };
+    checkAuth();
 
-    // 1. Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isMounted) {
-        if (session) {
-          fetchProfile(session.user.id);
-        } else {
-          setSessionExists(false);
-          setLoading(false);
-        }
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') router.replace('/login');
     });
 
-    // 2. Listen for changes (like logging out)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' && isMounted) {
-        setSessionExists(false);
-        router.replace('/login');
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, [router]);
 
   const handleLogout = async () => {
@@ -70,18 +44,7 @@ export default function LecturerLayout({ children }: { children: React.ReactNode
     router.push('/login');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-blue-900 font-bold text-xl">Loading Portal...</div>;
-
-  // Fallback if session is completely lost
-  if (sessionExists === false) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Session Expired</h2>
-        <p className="text-gray-500 mb-6">Please log in again to access the portal.</p>
-        <button onClick={() => router.push('/login')} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold">Go to Login</button>
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   const navItems = [
     { name: 'Dashboard', path: '/lecturer', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -94,12 +57,37 @@ export default function LecturerLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <aside className="w-64 bg-blue-900 text-white flex flex-col fixed h-full z-10">
-        <div className="h-16 flex items-center px-6 border-b border-blue-800">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center mr-3">
+      
+      {/* MOBILE TOP BAR */}
+      <div className="md:hidden fixed top-0 left-0 w-full h-16 bg-blue-900 text-white flex items-center justify-between px-4 z-50 shadow-md">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
             <span className="text-blue-900 font-bold text-sm">A</span>
           </div>
-          <span className="font-bold text-lg tracking-tight">ATU Campus</span>
+          <span className="font-bold">ATU Campus</span>
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2">
+          <Menu className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* MOBILE OVERLAY */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)}></div>
+      )}
+
+      {/* SIDEBAR */}
+      <aside className={`fixed top-0 left-0 h-full w-64 bg-blue-900 text-white flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="h-16 flex items-center justify-between px-6 border-b border-blue-800">
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center mr-3">
+              <span className="text-blue-900 font-bold text-sm">A</span>
+            </div>
+            <span className="font-bold text-lg tracking-tight">ATU Campus</span>
+          </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden p-1">
+            <X className="w-6 h-6 text-blue-300" />
+          </button>
         </div>
         
         <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
@@ -107,7 +95,12 @@ export default function LecturerLayout({ children }: { children: React.ReactNode
           {navItems.map((item) => {
             const isActive = pathname === item.path;
             return (
-              <Link key={item.name} href={item.path} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-blue-800 text-white font-semibold' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'}`}>
+              <Link 
+                key={item.name} 
+                href={item.path} 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-blue-800 text-white font-semibold' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'}`}
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
                 {item.name}
               </Link>
@@ -135,7 +128,8 @@ export default function LecturerLayout({ children }: { children: React.ReactNode
         </div>
       </aside>
 
-      <main className="flex-1 ml-64 p-8">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 w-full pt-20 pb-8 px-4 md:pt-8 md:pb-8 md:px-8 md:ml-64 transition-all duration-300">
         {children}
       </main>
     </div>

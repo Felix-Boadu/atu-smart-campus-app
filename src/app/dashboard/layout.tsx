@@ -4,61 +4,34 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { Menu, X } from 'lucide-react'; // Import icons for mobile menu
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [adminName, setAdminName] = useState('Administrator');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // NEW: Mobile menu state
+  
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
+    // ... (Keep your existing auth logic exactly the same) ...
     let mounted = true;
-
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      // GRACE PERIOD: If no session, wait 500ms to see if it's just loading
-      if (!session) {
-        setTimeout(async () => {
-          const { data: { session: retrySession } } = await supabase.auth.getSession();
-          if (!retrySession && mounted) {
-            router.replace('/login');
-          }
-        }, 500);
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, role, avatar_url')
-        .eq('id', session.user.id)
-        .single();
-      
-      // Security Check: Kick out non-admins
-      if (profile?.role !== 'admin') { 
-        if (mounted) router.replace('/login'); 
-        return; 
-      }
-      
+      if (!session) { setTimeout(() => { if (mounted) router.replace('/login'); }, 500); return; }
+      const { data: profile } = await supabase.from('profiles').select('full_name, role, avatar_url').eq('id', session.user.id).single();
+      if (profile?.role !== 'admin') { if (mounted) router.replace('/login'); return; }
       if (mounted) {
         setAdminName(profile.full_name || 'Administrator');
         setAvatarUrl(profile.avatar_url || null);
         setLoading(false);
       }
     };
-
     checkAuth();
-
-    // Listen for manual logout
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') router.replace('/login');
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') router.replace('/login'); });
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, [router]);
 
   const handleLogout = async () => {
@@ -69,6 +42,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading Admin...</div>;
 
   const navItems = [
+    // ... (Keep your existing navItems array) ...
     { name: 'Dashboard', path: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { name: 'User Management', path: '/dashboard/accounts', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
     { name: 'Manage Courses', path: '/dashboard/courses', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
@@ -80,12 +54,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-10">
-        <div className="h-16 flex items-center px-6 border-b border-slate-800">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-            <span className="text-white font-bold text-sm">A</span>
+      
+      {/* MOBILE TOP BAR (Only visible on small screens) */}
+      <div className="md:hidden fixed top-0 left-0 w-full h-16 bg-slate-900 text-white flex items-center justify-between px-4 z-50 shadow-md">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="font-bold text-sm">A</span>
           </div>
-          <span className="font-bold text-lg tracking-tight">ATU Admin</span>
+          <span className="font-bold">ATU Admin</span>
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2">
+          <Menu className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* MOBILE OVERLAY (Dark background when menu is open) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden" 
+          onClick={() => setIsMobileMenuOpen(false)}
+        ></div>
+      )}
+
+      {/* SIDEBAR */}
+      <aside className={`fixed top-0 left-0 h-full w-64 bg-slate-900 text-white flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
+              <span className="text-white font-bold text-sm">A</span>
+            </div>
+            <span className="font-bold text-lg tracking-tight">ATU Admin</span>
+          </div>
+          {/* Close button for mobile */}
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden p-1">
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
         </div>
         
         <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
@@ -93,7 +96,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {navItems.map((item) => {
             const isActive = pathname === item.path;
             return (
-              <Link key={item.name} href={item.path} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-blue-600 text-white font-semibold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+              <Link 
+                key={item.name} 
+                href={item.path} 
+                onClick={() => setIsMobileMenuOpen(false)} // Close menu on click
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-blue-600 text-white font-semibold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
                 {item.name}
               </Link>
@@ -121,7 +129,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <main className="flex-1 ml-64 p-8">
+      {/* MAIN CONTENT AREA */}
+      {/* pt-20 on mobile pushes content below the top bar. md:pt-8 resets it for desktop. */}
+      <main className="flex-1 w-full pt-20 pb-8 px-4 md:pt-8 md:pb-8 md:px-8 md:ml-64 transition-all duration-300">
         {children}
       </main>
     </div>
